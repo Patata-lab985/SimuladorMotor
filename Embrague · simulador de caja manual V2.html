@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Embrague · simulador de caja manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500&display=swap">
+<style>
+:root{--bg:#e9ebee;--panel:#fff;--ink:#14181f;--mute:#5b6572;--line:#c9ced6;--amber:#e8962a;--ok:#1f9d7a;--bad:#d23b43;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--panel:#171b22;--ink:#e8eaee;--mute:#8b94a1;--line:#2a313b}}
+:root[data-theme="dark"]{--bg:#0e1116;--panel:#171b22;--ink:#e8eaee;--mute:#8b94a1;--line:#2a313b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.45 Barlow,system-ui,sans-serif;overflow-x:hidden;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+#app{max-width:880px;margin:0 auto;padding:14px 14px 28px}
+header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+h1{font:700 28px/1 "Barlow Condensed",sans-serif;margin:0;flex:1 1 auto;letter-spacing:.01em}
+h1 small{display:block;font:400 13px Barlow,sans-serif;color:var(--mute);margin-top:3px}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#cluster{display:grid;grid-template-columns:1fr 1fr;gap:10px;will-change:transform}
+canvas{width:100%;aspect-ratio:1;display:block}
+#msg{margin:10px 0 0;min-height:22px;color:var(--mute)}
+#chips{display:flex;flex-wrap:wrap;gap:6px;min-height:34px;margin-top:8px}
+.chip{font:500 14px Barlow;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--panel)}
+.chip.ok{border-color:var(--ok);color:var(--ok)}.chip.warn{border-color:var(--amber);color:var(--amber)}.chip.bad{border-color:var(--bad);color:var(--bad)}
+#bars{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
+.bar{font-size:13px;color:var(--mute)}.bar div{height:8px;border-radius:4px;background:var(--line);margin-top:4px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--amber)}
+#controls{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pedal{position:relative;height:170px;overflow:hidden;font:700 20px "Barlow Condensed",sans-serif;touch-action:none}
+.pedal i{position:absolute;left:0;right:0;top:0;height:0;background:var(--amber);opacity:.35}
+.pedal span{position:relative}
+#gears{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
+#gears button{padding:14px 0;font:700 20px "Barlow Condensed",sans-serif}
+#gears button.on{background:var(--amber);color:#14181f;border-color:var(--amber)}
+#start{margin-top:10px;width:100%;padding:12px;font:700 18px "Barlow Condensed",sans-serif;touch-action:none}
+#keys,#sens{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+#keys[hidden],#sens[hidden]{display:none}
+#keys p,#sens p{margin:0 0 8px;color:var(--mute)}
+.sl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin-bottom:10px}
+.sl input{grid-column:1/3;width:100%;accent-color:var(--amber)}
+.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px}
+.map button{display:flex;justify-content:space-between;gap:8px}
+@media (max-width:520px){#bars{grid-template-columns:1fr 1fr}.pedal{height:130px}#cluster{gap:6px}}
+@media (prefers-reduced-motion:reduce){#cluster{transform:none!important}}
+</style>
+</head>
+<body>
+<main id="app">
+<header>
+<h1>Embrague<small>Simulador de caja manual de 5 marchas</small></h1>
+<button id="sensBtn">Sensibilidad</button><button id="keysBtn">Teclas</button><button id="reset">Reiniciar</button>
+</header>
+<section id="cluster"><canvas id="tach"></canvas><canvas id="spd"></canvas></section>
+<p id="msg"></p>
+<section id="chips" aria-live="polite"></section>
+<section id="bars">
+<div class="bar">Motor<div><i id="b-eng"></i></div></div>
+<div class="bar">Caja<div><i id="b-gb"></i></div></div>
+<div class="bar">Desgaste del embrague<div><i id="b-wear"></i></div></div>
+<div class="bar">Temperatura del embrague<div><i id="b-heat"></i></div></div>
+</section>
+<section id="controls">
+<button class="pedal" data-act="clutch"><i></i><span>Embrague</span></button>
+<button class="pedal" data-act="brake"><i></i><span>Freno</span></button>
+<button class="pedal" data-act="throttle"><i></i><span>Acelerador</span></button>
+</section>
+<section id="gears"></section>
+<button id="start" data-act="start">Arrancar</button>
+<section id="sens" hidden>
+<p>Ajusta cómo responden las teclas. 100 % es el comportamiento normal. Si arrastras un pedal en pantalla con el dedo o el ratón, controlas su posición directamente y estos ajustes no cuentan.</p>
+<label class="sl">Embrague: velocidad al pisar<b id="v-cPress"></b><input type="range" id="s-cPress" min="20" max="300" step="5"></label>
+<label class="sl">Embrague: velocidad al soltar<b id="v-cRel"></b><input type="range" id="s-cRel" min="20" max="300" step="5"></label>
+<label class="sl">Acelerador: velocidad<b id="v-tSpd"></b><input type="range" id="s-tSpd" min="20" max="300" step="5"></label>
+<label class="sl">Acelerador: tope al mantener la tecla<b id="v-tMax"></b><input type="range" id="s-tMax" min="10" max="100" step="5"></label>
+</section>
+<section id="keys" hidden>
+<p>Pulsa una acción y luego la tecla que quieras. Las marchas se eligen con 0 (punto muerto), 1 a 5 y R.</p>
+<div class="map" id="map"></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const GR=[0,3.6,2.1,1.4,1.0,0.8],REV=3.4,FD=3.9,RW=0.3,MASS=1100,JE=0.25,K=80,CAPMAX=330;
+const ratio=g=>g===-1?-REV*FD:g===0?0:GR[g]*FD;
+const rpmOf=w=>w*60/(2*Math.PI);
+const S={w:90,v:0,gear:0,running:false,c:0,t:0,b:0,heat:0,wear:0,eng:0,gb:0,shake:0,Tc:0,slip:0,e:1,stallT:0,grindT:0,rejT:0,broken:false};
+const hold={};
+const DEF={clutch:'ShiftLeft',throttle:'ArrowUp',brake:'ArrowDown',start:'Enter',gearUp:'KeyE',gearDown:'KeyQ'};
+const NAMES={clutch:'Embrague',throttle:'Acelerador',brake:'Freno',start:'Arrancar',gearUp:'Subir marcha',gearDown:'Bajar marcha'};
+let keymap={...DEF};
+try{Object.assign(keymap,JSON.parse(localStorage.getItem('keymap')||'{}'))}catch(e){}
+const SEQ=[-1,0,1,2,3,4,5];
+const label=g=>g===-1?'R':g===0?'N':String(g);
+
+/* Caja de cambios */
+function selectGear(g){
+  if(g===S.gear)return;
+  if(g===0){S.gear=0;return}
+  if(S.gb>=1){S.rejT=1.2;S.shake=Math.max(S.shake,.3);msg('Caja destrozada: ya no entran marchas. Reinicia.');return}
+  const wNew=S.v/RW*ratio(g),mism=Math.abs(rpmOf(S.w)-rpmOf(Math.abs(wNew)))/1000;
+  const sev=S.c<0.85?(0.85-S.c)/0.85*(0.3+Math.min(mism,3)):0;
+  if(sev>0.05){
+    S.grindT=1;S.shake=Math.max(S.shake,Math.min(1,sev+.25));S.gb=Math.min(1,S.gb+sev*0.07);beep(true);
+    if(sev>0.6){S.gear=0;S.rejT=1;return}
+  }
+  S.gear=g;
+}
+function shiftSeq(d){const i=SEQ.indexOf(S.gear);selectGear(SEQ[clamp(i+d,0,SEQ.length-1)])}
+
+function startEngine(){
+  if(S.running)return;
+  if(S.broken||S.eng>=1){msg('El motor está roto. Reinicia.');return}
+  S.running=true;S.w=Math.max(S.w,rpmOf(1)*0+55);S.stallT=0;audioOn();
+}
+
+/* Física: pasos de 1 ms */
+const bite=e=>e<.7?.08*e/.7:.08+.92*Math.pow((e-.7)/.3,1.6);
+function step(h){
+  const rpm=rpmOf(S.w),Gr=ratio(S.gear);
+  const Tcurve=Math.max(40,180*(1-((rpm-4200)/4500)**2)),Tf=12+rpm*0.008;
+  let Te;
+  if(S.running){
+    const Tth=rpm>6800?0:S.t*Tcurve,Tidle=clamp((900-rpm)*0.3,0,55)*clamp((rpm-500)/250,0,1);
+    Te=Tth+Tidle*Math.max(0,1-S.t*5)-Tf;
+  }else Te=-Tf;
+  const x=clamp((0.8-S.c)/0.55,0,1),e=x*x*(3-2*x);
+  const fade=S.heat>0.8?Math.max(0.2,1-(S.heat-0.8)*3):1;
+  const cap=CAPMAX*bite(e)*(1-S.wear*0.7)*fade;
+  let Tc=0,wt=0;
+  if(Gr!==0){wt=S.v/RW*Gr;Tc=clamp(K*(S.w-wt),-cap,cap)}
+  S.w=Math.max(0,S.w+(Te-Tc)/JE*h);
+  S.v+=Tc*Gr/RW/MASS*h;
+  const dv=(0.012*MASS*9.81+0.42*S.v*S.v+S.b*11000)/MASS*h;
+  S.v=Math.abs(S.v)<=dv?0:S.v-Math.sign(S.v)*dv;
+  const slip=S.w-wt,P=Math.abs(Tc*slip);
+  S.heat=Math.max(0,S.heat+P*h/60000-S.heat*0.05*h);
+  S.wear=Math.min(1,S.wear+Math.max(0,S.heat-0.5)*0.004*h);
+  if(rpm>7000)S.eng=Math.min(1,S.eng+(rpm-7000)/1000*0.2*h);
+  S.Tc=Tc;S.slip=Gr?slip:0;S.e=e;
+  if(S.running&&rpm<400){S.running=false;S.stallT=2.5;S.shake=Math.max(S.shake,.5+Math.min(.5,Math.abs(S.v)/8));beep(true)}
+  if(S.eng>=1&&S.running){S.running=false;S.broken=true}
+}
+
+/* Entradas con rampa */
+function axis(v,act,up,down,max,dt){
+  if(ana[act]!==undefined)return v+(ana[act]-v)*Math.min(1,18*dt);
+  const tg=hold[act]?max:0;
+  return tg>v?Math.min(tg,v+up*dt):Math.max(tg,v-down*dt);
+}
+function inputs(dt){
+  S.c=axis(S.c,'clutch',5*SET.cPress/100,0.3*(S.c>0.22&&S.c<0.82&&Math.abs(S.slip)>20?1:4)*SET.cRel/100,1,dt);
+  S.t=axis(S.t,'throttle',3.5*SET.tSpd/100,6*SET.tSpd/100,SET.tMax/100,dt);
+  S.b=axis(S.b,'brake',5,6,1,dt);
+}
+
+/* Interfaz */
+function msg(t){$('msg').textContent=t}
+function chip(t,k){return `<span class="chip ${k}">${t}</span>`}
+function ui(dt){
+  const rpm=rpmOf(S.w),kmh=S.v*3.6,Gr=ratio(S.gear);
+  S.stallT=Math.max(0,S.stallT-dt);S.grindT=Math.max(0,S.grindT-dt);S.rejT=Math.max(0,S.rejT-dt);
+  if(S.running&&Gr&&S.slip>25&&S.e>0.05&&S.e<0.6&&Math.abs(S.v)<4)S.shake=Math.max(S.shake,.1);
+  S.shake*=Math.exp(-6*dt);
+  const sh=S.shake*14;
+  $('cluster').style.transform=sh>.2?`translate(${(Math.random()-.5)*sh}px,${(Math.random()-.5)*sh}px)`:'';
+  let c='';
+  if(S.broken)c+=chip('Motor roto','bad');
+  else if(S.stallT>0)c+=chip('Calado','bad');
+  else if(!S.running)c+=chip('Motor apagado','warn');
+  if(S.running&&rpm<1100&&S.t<0.05)c+=chip('Ralentí','ok');
+  if(S.running&&Gr&&S.e>0.9&&S.t<0.05&&S.Tc<-15&&rpm>1300)c+=chip('Freno motor','ok');
+  if(S.running&&Gr&&S.slip>15&&S.e>0.05)c+=chip('Patinando','warn');
+  if(S.running&&rpm>6800)c+=chip(rpm>7000?'Sobrerrevoluciones':'Limitador','bad');
+  if(S.grindT>0)c+=chip('Crujido de caja','bad');
+  if(S.rejT>0)c+=chip('No entra la marcha','warn');
+  if(S.heat>0.8)c+=chip('Embrague quemándose','bad');
+  $('chips').innerHTML=c;
+  if(S.broken)msg('Motor roto por sobrerrevoluciones.');
+  else if(!S.running&&S.stallT>0)msg('Se calló. Pisa el embrague y vuelve a arrancar.');
+  else if(!S.running)msg('Pisa el embrague, pon N o 1ª y arranca.');
+  else msg('');
+  const set=(id,v)=>{const el=$(id);el.style.width=clamp(v,0,1)*100+'%';el.style.background=v>.8?'var(--bad)':v>.5?'var(--amber)':'var(--ok)'};
+  set('b-eng',S.eng);set('b-gb',S.gb);set('b-wear',S.wear);set('b-heat',S.heat);
+  document.querySelectorAll('.pedal').forEach(p=>p.firstElementChild.style.height=S[{clutch:'c',brake:'b',throttle:'t'}[p.dataset.act]]*100+'%');
+  document.querySelectorAll('#gears button').forEach(b=>b.classList.toggle('on',+b.dataset.g===S.gear));
+  gauge($('tach'),8,rpm/1000,1,6.8,'x1000 rpm',label(S.gear),'#e8962a');
+  gauge($('spd'),200,Math.abs(kmh),20,200,'km/h',Math.round(Math.abs(kmh))+(kmh<-.5?' R':''),'#e8eaee');
+  audioUpdate(rpm);
+}
+function gauge(cv,max,val,major,red,lab,big,col){
+  const d=window.devicePixelRatio||1,w=cv.clientWidth;if(!w)return;
+  if(cv.width!==Math.round(w*d)){cv.width=cv.height=Math.round(w*d)}
+  const x=cv.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,w);
+  const c=w/2,R=w*.46,a0=.75*Math.PI,sw=1.5*Math.PI,ang=v=>a0+sw*v/max;
+  x.fillStyle='#12161c';x.beginPath();x.arc(c,c,c-1,0,7);x.fill();
+  if(red<max){x.lineWidth=w*.03;x.strokeStyle='#d23b43';x.beginPath();x.arc(c,c,R*.94,ang(red),ang(max));x.stroke()}
+  x.fillStyle='#e8eaee';x.strokeStyle='#8b94a1';x.textAlign='center';x.textBaseline='middle';
+  x.font=`500 ${w*.055}px "Barlow Condensed",sans-serif`;
+  for(let i=0;i<=max+1e-6;i+=major/2){
+    const a=ang(i),big_=Math.abs(i/major-Math.round(i/major))<1e-6,r1=R*(big_?.78:.83),r2=R*.88;
+    x.lineWidth=big_?2:1;x.beginPath();x.moveTo(c+Math.cos(a)*r1,c+Math.sin(a)*r1);x.lineTo(c+Math.cos(a)*r2,c+Math.sin(a)*r2);x.stroke();
+    if(big_)x.fillText(String(Math.round(i)),c+Math.cos(a)*R*.66,c+Math.sin(a)*R*.66);
+  }
+  const a=ang(Math.min(val,max*1.02));
+  x.strokeStyle=col;x.lineWidth=w*.012;x.lineCap='round';x.beginPath();x.moveTo(c,c);x.lineTo(c+Math.cos(a)*R*.84,c+Math.sin(a)*R*.84);x.stroke();
+  x.fillStyle=col;x.beginPath();x.arc(c,c,w*.025,0,7);x.fill();
+  x.fillStyle='#e8eaee';x.font=`700 ${w*.16}px "Barlow Condensed",sans-serif`;x.fillText(big,c,c+R*.42);
+  x.fillStyle='#8b94a1';x.font=`500 ${w*.05}px Barlow,sans-serif`;x.fillText(lab,c,c+R*.62);
+}
+
+/* Sonido */
+let ac,osc,flt,gn;
+function audioOn(){
+  try{
+    if(!ac){ac=new (window.AudioContext||window.webkitAudioContext)();osc=ac.createOscillator();osc.type='sawtooth';flt=ac.createBiquadFilter();flt.type='lowpass';gn=ac.createGain();gn.gain.value=0;osc.connect(flt);flt.connect(gn);gn.connect(ac.destination);osc.start()}
+    if(ac.state==='suspended')ac.resume();
+  }catch(e){}
+}
+function audioUpdate(rpm){
+  if(!ac)return;
+  try{
+    osc.frequency.value=Math.max(10,rpm/60*2);flt.frequency.value=300+rpm*0.5;
+    gn.gain.value=S.running?0.04+0.07*S.t:0;
+  }catch(e){}
+}
+function beep(bad){
+  if(!ac)return;
+  try{const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=bad?90:300;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.25);o.stop(ac.currentTime+.26)}catch(e){}
+}
+
+/* Controles */
+function setHold(act,v){
+  if(act==='start'){if(v&&!hold.start)startEngine();hold.start=v;return}
+  if(act==='gearUp'||act==='gearDown'){if(v&&!hold[act])shiftSeq(act==='gearUp'?1:-1);hold[act]=v;return}
+  hold[act]=v;audioOn();
+}
+document.querySelectorAll('[data-act]:not(.pedal)').forEach(b=>{
+  b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);setHold(b.dataset.act,true)});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>setHold(b.dataset.act,false)));
+});
+const ana={};
+document.querySelectorAll('.pedal').forEach(p=>{
+  const act=p.dataset.act,f=e=>{const r=p.getBoundingClientRect();return clamp((e.clientY-r.top)/r.height,0,1)};
+  p.addEventListener('pointerdown',e=>{e.preventDefault();p.setPointerCapture(e.pointerId);ana[act]=f(e);audioOn()});
+  p.addEventListener('pointermove',e=>{if(ana[act]!==undefined)ana[act]=f(e)});
+  ['pointerup','pointercancel'].forEach(ev=>p.addEventListener(ev,()=>{delete ana[act]}));
+});
+const gears=$('gears');
+SEQ.forEach(g=>{const b=document.createElement('button');b.textContent=label(g);b.dataset.g=g;b.onclick=()=>selectGear(g);gears.appendChild(b)});
+let rebinding=null;
+function drawMap(){
+  $('map').innerHTML='';
+  Object.keys(NAMES).forEach(a=>{
+    const b=document.createElement('button');b.innerHTML=`<span>${NAMES[a]}</span><b>${rebinding===a?'pulsa una tecla…':keymap[a]}</b>`;
+    b.onclick=()=>{rebinding=a;drawMap()};$('map').appendChild(b);
+  });
+}
+$('keysBtn').onclick=()=>{$('keys').hidden=!$('keys').hidden;drawMap()};
+$('reset').onclick=()=>{Object.assign(S,{w:90,v:0,gear:0,running:false,heat:0,wear:0,eng:0,gb:0,shake:0,Tc:0,stallT:0,grindT:0,rejT:0,broken:false})};
+addEventListener('keydown',e=>{
+  if(rebinding){e.preventDefault();keymap[rebinding]=e.code;try{localStorage.setItem('keymap',JSON.stringify(keymap))}catch(_){}rebinding=null;drawMap();return}
+  if(e.repeat){const hit=Object.keys(keymap).some(a=>keymap[a]===e.code);if(hit)e.preventDefault();return}
+  const num={Digit0:0,Numpad0:0,Digit1:1,Numpad1:1,Digit2:2,Numpad2:2,Digit3:3,Numpad3:3,Digit4:4,Numpad4:4,Digit5:5,Numpad5:5,KeyR:-1};
+  if(e.code in num){e.preventDefault();audioOn();selectGear(num[e.code]);return}
+  for(const a in keymap)if(keymap[a]===e.code){e.preventDefault();setHold(a,true)}
+});
+addEventListener('keyup',e=>{for(const a in keymap)if(keymap[a]===e.code){setHold(a,false)}});
+addEventListener('blur',()=>{for(const a in hold)hold[a]=false});
+
+const SET={cPress:100,cRel:100,tSpd:100,tMax:100};
+try{Object.assign(SET,JSON.parse(localStorage.getItem('sens')||'{}'))}catch(e){}
+Object.keys(SET).forEach(k=>{
+  const el=$('s-'+k),out=$('v-'+k);el.value=SET[k];out.textContent=SET[k]+' %';
+  el.oninput=()=>{SET[k]=+el.value;out.textContent=SET[k]+' %';try{localStorage.setItem('sens',JSON.stringify(SET))}catch(_){}};
+});
+$('sensBtn').onclick=()=>{$('sens').hidden=!$('sens').hidden};
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  inputs(dt);
+  const n=Math.max(1,Math.round(dt/0.001));
+  for(let i=0;i<n;i++)step(dt/n);
+  ui(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
